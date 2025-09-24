@@ -48,4 +48,5 @@ All logic lives inline in `index.html` and interacts with the Puter SDK:
 - Puter JS SDK (CDN): `https://js.puter.com/v2/`
 
 ## License
-This starter is provided as-is for demonstration purposes. Use, modify, or integrate as needed.
+
+This project is licensed under the [MIT License](LICENSE).
