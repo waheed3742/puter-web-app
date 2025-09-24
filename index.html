@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Puter.js Starter</title>
+	<script src="https://js.puter.com/v2/"></script>
+	<style>
+		body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+		.container { max-width: 860px; margin: 0 auto; }
+		h1 { margin: 0 0 8px; }
+		nav { display: flex; gap: 8px; margin: 16px 0 24px; flex-wrap: wrap; }
+		button { padding: 8px 12px; border: 1px solid #ddd; background: #fff; border-radius: 6px; cursor: pointer; }
+		button.primary { background: #007bff; color: #fff; border-color: #007bff; }
+		.card { border: 1px solid #eee; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+		label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; }
+		input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
+		footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #eee; font-size: 13px; color: #666; }
+		.hidden { display: none; }
+		pre { white-space: pre-wrap; word-wrap: break-word; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>Puter.js Starter</h1>
+		<p>Frontend-only app using Puter Cloud, KV and AI.</p>
+
+		<nav>
+			<button id="btnSignIn">Sign In</button>
+			<button id="btnUser">Get User</button>
+			<button id="btnSpace">Storage Space</button>
+			<button id="btnNewFile">Create File</button>
+			<button id="btnOpenFile">Open File</button>
+			<button id="btnHost" class="primary">Publish Site</button>
+		</nav>
+
+		<div class="card">
+			<label>AI Chat (model: gpt-5-nano)</label>
+			<textarea id="prompt" rows="4" placeholder="Ask anything..."></textarea>
+			<div style="margin-top:8px; display:flex; gap:8px;">
+				<button id="btnAsk">Ask</button>
+				<button id="btnStream">Stream</button>
+			</div>
+			<div id="aiOut" class="card" style="margin-top:12px; background:#fafafa;"></div>
+		</div>
+
+		<div class="card">
+			<label>KV Demo</label>
+			<div style="display:flex; gap:8px; margin-bottom:8px;">
+				<input id="kvKey" placeholder="key (e.g., settings:theme)" />
+				<input id="kvVal" placeholder="value (e.g., dark)" />
+			</div>
+			<div style="display:flex; gap:8px; flex-wrap:wrap;">
+				<button id="kvSet">KV Set</button>
+				<button id="kvGet">KV Get</button>
+				<button id="kvList">KV List</button>
+				<button id="kvFlush">KV Flush</button>
+			</div>
+			<pre id="kvOut" style="margin-top:12px;"></pre>
+		</div>
+
+		<div id="log" class="card hidden"></div>
+
+		<footer>
+			<a href="https://developer.puter.com" target="_blank" rel="noopener">Powered by Puter</a>
+		</footer>
+	</div>
+
+	<script>
+		const $ = (id) => document.getElementById(id);
+		const log = (msg) => { const el = $('log'); el.classList.remove('hidden'); el.innerHTML = String(msg); };
+
+		// Auth
+		$('btnSignIn').onclick = async () => {
+			try {
+				await puter.auth.signIn();
+				log('Signed in.');
+			} catch (e) {
+				log('Sign-in canceled or failed.');
+			}
+		};
+		$('btnUser').onclick = async () => {
+			try {
+				const user = await puter.auth.getUser();
+				log(JSON.stringify(user, null, 2));
+			} catch (e) {
+				log(e.message);
+			}
+		};
+
+		// Storage space
+		$('btnSpace').onclick = async () => {
+			try {
+				const space = await puter.fs.space();
+				log(JSON.stringify(space, null, 2));
+			} catch (e) {
+				log(e.message);
+			}
+		};
+
+		// Files
+		$('btnNewFile').onclick = async () => {
+			try {
+				const name = `hello_${Date.now()}.txt`;
+				await puter.fs.write(name, 'Hello, world!');
+				log(`Created: ${name}`);
+			} catch (e) {
+				log(e.message);
+			}
+		};
+		$('btnOpenFile').onclick = async () => {
+			try {
+				const file = await puter.ui.showOpenFilePicker();
+				const text = await (await file.read()).text();
+				log(`Opened "${file.path}"\n\n${text}`);
+			} catch (e) {
+				log(e.message);
+			}
+		};
+
+		// Hosting (publish index.html)
+		$('btnHost').onclick = async () => {
+			try {
+				const dir = `site_${puter.randName()}`;
+				await puter.fs.mkdir(dir);
+				await puter.fs.write(`${dir}/index.html`, `<h1>Hello from Puter Hosting</h1>`);
+				const sub = puter.randName();
+				const site = await puter.hosting.create(sub, dir);
+				log(`Hosted at: https://${site.subdomain}.puter.site`);
+			} catch (e) {
+				log(e.message);
+			}
+		};
+
+		// AI Chat
+		$('btnAsk').onclick = async () => {
+			const q = $('prompt').value.trim();
+			if (!q) return;
+			$('aiOut').textContent = 'Loading...';
+			try {
+				const res = await puter.ai.chat(q, { model: 'gpt-5-nano' });
+				$('aiOut').textContent = res?.message?.content ?? String(res);
+			} catch (e) {
+				$('aiOut').textContent = e.message;
+			}
+		};
+		$('btnStream').onclick = async () => {
+			const q = $('prompt').value.trim();
+			if (!q) return;
+			$('aiOut').textContent = '';
+			try {
+				const stream = await puter.ai.chat(q, { model: 'gpt-5-nano', stream: true });
+				for await (const part of stream) {
+					if (part?.text) $('aiOut').textContent += part.text;
+				}
+			} catch (e) {
+				$('aiOut').textContent = e.message;
+			}
+		};
+
+		// Optional: basic menubar
+		puter.ui.setMenubar?.({
+			items: [
+				{ label: 'File', items: [
+					{ label: 'New File', action: () => $('btnNewFile').click() },
+					{ label: 'Open File', action: () => $('btnOpenFile').click() },
+				]},
+				{ label: 'AI', items: [
+					{ label: 'Ask', action: () => $('btnAsk').click() },
+					{ label: 'Stream', action: () => $('btnStream').click() },
+				]},
+				{ label: 'Hosting', items: [
+					{ label: 'Publish', action: () => $('btnHost').click() },
+				]},
+			]
+		});
+	</script>
+</body>
+</html>
